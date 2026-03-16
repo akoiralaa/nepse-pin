@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Data files (large — don't commit raw CSVs)
+data/raw/
+data/daily/
+data/logs/
+data_test/
+data_test2/
+
+# Results (regeneratable)
+results/
+pin_results.csv
+pin_estimation_log.txt
+analysis_log.txt
+
+# Quality reports stay (small, useful)
+!data/quality/
+
+# Logs
+*.log
+*.txt
+!DEVLOG.md
+!README.md
+
+# macOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
