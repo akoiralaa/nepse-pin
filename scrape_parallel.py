@@ -1,23 +1,3 @@
-"""
-scrape_parallel.py
-------------------
-Parallel floorsheet scraper — runs one subprocess per symbol concurrently.
-
-Each worker calls scraper.py --symbol <SYM> independently, so they share
-no state and there are no race conditions on output files.
-
-Rate-limiting strategy:
-  - MAX_WORKERS controls simultaneous symbols (default: 4)
-  - Each worker already enforces 2s between its own requests
-  - Workers are staggered by STAGGER_SECS at launch to spread initial
-    GET/POST bursts across time
-
-Usage:
-    python3 scrape_parallel.py --start 2021-01-01 --end 2026-03-16
-    python3 scrape_parallel.py --start 2021-01-01 --end 2026-03-16 --workers 3
-    python3 scrape_parallel.py --resume          # skip symbols already done
-"""
-
 import argparse
 import subprocess
 import sys
@@ -48,22 +28,14 @@ SYMBOLS = [
 MAX_WORKERS   = 4     # concurrent symbols; raise to 5-6 if Merolagani is tolerant
 STAGGER_SECS  = 8     # seconds between launching each worker
 
-
 def already_done(symbol: str, start: date, end: date, output_dir: Path) -> bool:
-    """Return True if a complete CSV already exists for this symbol+range."""
     expected = output_dir / "raw" / f"{symbol}_{start}_{end}.csv"
     if not expected.exists():
         return False
     # Quick sanity check: file should have at least a few KB
     return expected.stat().st_size > 10_000
 
-
 def scrape_one(symbol: str, start: str, end: str, output_dir: str, log_dir: str) -> tuple[str, int]:
-    """
-    Worker function: calls `python3 scraper.py --symbol SYM ...` as a subprocess.
-    Returns (symbol, return_code).
-    Logs stdout+stderr to log_dir/SYM.log.
-    """
     log_path = Path(log_dir) / f"{symbol}.log"
     cmd = [
         sys.executable, "scraper.py",
@@ -75,7 +47,6 @@ def scrape_one(symbol: str, start: str, end: str, output_dir: str, log_dir: str)
     with open(log_path, "w") as lf:
         result = subprocess.run(cmd, stdout=lf, stderr=lf, text=True)
     return symbol, result.returncode
-
 
 def run_parallel(
     start:      date,
@@ -144,7 +115,6 @@ def run_parallel(
         log.error("Failed:    %s", ", ".join(failed))
         log.info("Re-run with --resume to retry failed symbols only")
     log.info("=" * 50)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parallel NEPSE Floorsheet Scraper")

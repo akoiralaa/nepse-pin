@@ -1,56 +1,3 @@
-"""
-pin_estimator.py
-----------------
-NEPSE PIN Model — Task 2: MLE Estimation
-
-Implements the Easley-Hvidkjaer-O'Hara (2002) PIN model via numerically
-stable Maximum Likelihood Estimation.
-
-Key references:
-  - Easley, Kiefer, O'Hara, Paperman (1996) J. Finance 51(4)
-  - Easley, Hvidkjaer, O'Hara (2002) J. Finance 57(5)
-  - Easley, Lopez de Prado, O'Hara (2010) Rev. Financial Studies 25(5)
-    [overflow-safe factorization]
-  - Venter & De Jongh (2006) [zero-trade day handling]
-
-Model:
-  θ = (α, δ, μ, ε_b, ε_s)
-
-  Each trading day:
-    - With prob α: information event occurs
-        bad news (prob δ):  informed sell at rate μ, uninformed: ε_b, ε_s
-        good news (1-δ):    informed buy  at rate μ, uninformed: ε_b, ε_s
-    - With prob (1-α): no event, only uninformed: ε_b, ε_s
-
-  Likelihood for day t with (B_t, S_t) buy/sell counts:
-
-    L(θ|B,S) = α(1-δ) · P(B|μ+ε_b) · P(S|ε_s)       [good news]
-             + αδ      · P(B|ε_b)    · P(S|μ+ε_s)     [bad news]
-             + (1-α)   · P(B|ε_b)    · P(S|ε_s)        [no event]
-
-  where P(x|λ) = Poisson(x; λ) = e^{-λ} λ^x / x!
-
-  PIN = αμ / (αμ + ε_b + ε_s)
-
-Overflow handling:
-  For large B or S, λ^x overflows. We use the ELO (2010) factorization:
-
-    log P(x|λ) = x·log(λ) - λ - log(x!)
-               = x·log(λ) - λ - lgamma(x+1)
-
-  The three Poisson mixture terms share the same log(x!) so we factor it out
-  and use log-sum-exp for numerical stability of the mixture.
-
-Usage:
-    from pin_estimator import estimate_pin, estimate_all
-
-    # single stock
-    result = estimate_pin(daily_df, symbol='NABIL')
-
-    # batch
-    results_df = estimate_all(daily_df)
-"""
-
 import logging
 import warnings
 from dataclasses import dataclass
@@ -79,35 +26,12 @@ N_STARTS    = 64    # random starting points for multi-start MLE
 BOOTSTRAP_N = 1000  # bootstrap iterations for CI
 RANDOM_SEED = 42
 
-
 # ── log-likelihood ────────────────────────────────────────────────────────────
 
 def _log_poisson(x: np.ndarray, lam: float) -> np.ndarray:
-    """
-    Log of Poisson PMF: x·log(λ) - λ - log(x!)
-    Uses scipy.special.gammaln for log-factorial (handles large x).
-    """
     return x * np.log(lam) - lam - gammaln(x + 1)
 
-
 def log_likelihood(theta: np.ndarray, buys: np.ndarray, sells: np.ndarray) -> float:
-    """
-    Compute the total log-likelihood of the PIN model over all trading days.
-
-    Uses the ELO (2010) overflow-safe formulation:
-      - Compute each of the three mixture components in log-space
-      - Combine via log-sum-exp to avoid underflow/overflow
-
-    Parameters
-    ----------
-    theta : array [alpha, delta, mu, eps_b, eps_s]
-    buys  : array of daily buy counts
-    sells : array of daily sell counts
-
-    Returns
-    -------
-    float : total log-likelihood (scalar, higher = better fit)
-    """
     alpha, delta, mu, eps_b, eps_s = theta
 
     # Log mixture weights
@@ -141,20 +65,12 @@ def log_likelihood(theta: np.ndarray, buys: np.ndarray, sells: np.ndarray) -> fl
     total = np.sum(log_mix)
     return total if np.isfinite(total) else -1e18
 
-
 def _logsumexp_rows(arr: np.ndarray) -> np.ndarray:
-    """
-    Numerically stable log-sum-exp across columns for each row.
-    arr shape: (n_days, 3)
-    """
     row_max = arr.max(axis=1, keepdims=True)
     return row_max.squeeze() + np.log(np.exp(arr - row_max).sum(axis=1))
 
-
 def neg_log_likelihood(theta: np.ndarray, buys: np.ndarray, sells: np.ndarray) -> float:
-    """Negative log-likelihood (for minimization)."""
     return -log_likelihood(theta, buys, sells)
-
 
 # ── starting value generation ─────────────────────────────────────────────────
 
@@ -164,12 +80,6 @@ def generate_starting_values(
     mean_sells: float,
     rng: np.random.Generator,
 ) -> list[np.ndarray]:
-    """
-    Generate diverse starting values for multi-start MLE.
-
-    Strategy: sample α and δ uniformly; scale μ, ε_b, ε_s to the
-    observed mean trade counts so the optimizer starts in a sensible range.
-    """
     mean_trades = (mean_buys + mean_sells) / 2
     starts = []
 
@@ -194,7 +104,6 @@ def generate_starting_values(
 
     return starts[:n_starts]
 
-
 # ── single MLE run ────────────────────────────────────────────────────────────
 
 def _single_mle(
@@ -202,10 +111,6 @@ def _single_mle(
     buys: np.ndarray,
     sells: np.ndarray,
 ) -> tuple[np.ndarray | None, float, bool]:
-    """
-    Run one L-BFGS-B optimization from starting point theta0.
-    Returns (theta_opt, neg_ll, converged).
-    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = minimize(
@@ -224,7 +129,6 @@ def _single_mle(
         return result.x, result.fun, False
     return None, np.inf, False
 
-
 # ── main estimator ────────────────────────────────────────────────────────────
 
 @dataclass
@@ -242,11 +146,8 @@ class PINResult:
     n_days:           int
     convergence_rate: float   # fraction of starts that converged
 
-
 def compute_pin(alpha: float, mu: float, eps_b: float, eps_s: float) -> float:
-    """PIN = αμ / (αμ + ε_b + ε_s)"""
     return (alpha * mu) / (alpha * mu + eps_b + eps_s)
-
 
 def estimate_pin(
     daily_df:     pd.DataFrame,
@@ -256,23 +157,6 @@ def estimate_pin(
     min_trades:   int = 5,
     seed:         int = RANDOM_SEED,
 ) -> PINResult | None:
-    """
-    Estimate PIN for a single stock from daily aggregated trade data.
-
-    Parameters
-    ----------
-    daily_df    : DataFrame with columns [date, symbol, num_buys, num_sells, ...]
-                  (output of scraper.aggregate_daily)
-    symbol      : stock ticker to estimate
-    n_starts    : number of random starting points for multi-start MLE
-    bootstrap_n : number of bootstrap iterations for CI
-    min_trades  : minimum trades per day to include (days below are dropped)
-    seed        : random seed for reproducibility
-
-    Returns
-    -------
-    PINResult dataclass, or None if estimation fails.
-    """
     # ── data prep ──────────────────────────────────────────────────────────
     sym_df = daily_df[daily_df["symbol"] == symbol].copy() if "symbol" in daily_df.columns else daily_df.copy()
     sym_df = sym_df[sym_df["num_buys"] + sym_df["num_sells"] >= min_trades]
@@ -342,7 +226,6 @@ def estimate_pin(
         convergence_rate = float(convergence_rate),
     )
 
-
 def _bootstrap_pin(
     buys:      np.ndarray,
     sells:     np.ndarray,
@@ -351,12 +234,6 @@ def _bootstrap_pin(
     n_starts:  int,
     rng:       np.random.Generator,
 ) -> np.ndarray:
-    """
-    Bootstrap PIN distribution by resampling trading days with replacement.
-    Uses the MLE point estimate as the sole starting point for speed
-    (full multi-start for every bootstrap iteration would be prohibitive).
-    Falls back to 5 random starts around theta_hat if it fails.
-    """
     n = len(buys)
     pin_samples = []
 
@@ -391,7 +268,6 @@ def _bootstrap_pin(
 
     return np.array(pin_samples) if pin_samples else np.array([np.nan, np.nan])
 
-
 # ── batch estimation ──────────────────────────────────────────────────────────
 
 def estimate_all(
@@ -402,13 +278,6 @@ def estimate_all(
     min_trades:  int = 5,
     seed:        int = RANDOM_SEED,
 ) -> pd.DataFrame:
-    """
-    Run PIN estimation for all symbols in daily_df (or a specified subset).
-
-    Returns a DataFrame with one row per symbol:
-        symbol, alpha, delta, mu, eps_b, eps_s, PIN,
-        PIN_lower_CI, PIN_upper_CI, log_likelihood, n_days, convergence_rate
-    """
     if symbols is None:
         symbols = sorted(daily_df["symbol"].unique())
 
@@ -432,7 +301,6 @@ def estimate_all(
     df = pd.DataFrame(results)
     df = df.sort_values("PIN", ascending=False).reset_index(drop=True)
     return df
-
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 

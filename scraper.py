@@ -1,22 +1,3 @@
-"""
-scraper.py
-----------
-NEPSE PIN Model — Task 1: Data Pipeline
-
-Scrapes floorsheet data from merolagani.com/Floorsheet.aspx for a given
-symbol and date range.  Uses full-page ASP.NET POST with date + company
-filter.  No Selenium required.
-
-Usage:
-    python3 scraper.py --symbol NABIL --start 2021-01-01 --end 2024-12-31
-    python3 scraper.py --symbols NABIL NMB NICA --start 2021-01-01 --end 2024-12-31
-
-Output files:
-    data/raw/{SYMBOL}_{start}_{end}.csv          raw floorsheet
-    data/daily/{SYMBOL}_{start}_{end}_daily.csv  daily buy/sell counts
-    data/quality/{SYMBOL}_{start}_{end}_quality.md  quality report
-"""
-
 import argparse
 import logging
 import time
@@ -61,15 +42,9 @@ def make_session() -> requests.Session:
     })
     return s
 
-
 # ── company ID lookup ─────────────────────────────────────────────────────────
 
 def get_company_id(session: requests.Session, symbol: str) -> int | None:
-    """
-    Return Merolagani's internal company ID for *symbol*.
-    Uses the AutoSuggestHandler endpoint (returns JSON).
-    Returns None if the symbol is not found.
-    """
     try:
         r = session.get(
             AUTOSUGGEST,
@@ -87,14 +62,9 @@ def get_company_id(session: requests.Session, symbol: str) -> int | None:
         log.error("Failed to get company ID for %s: %s", symbol, e)
     return None
 
-
 # ── viewstate helpers ─────────────────────────────────────────────────────────
 
 def extract_viewstate(html: str) -> dict:
-    """
-    Parse ASP.NET hidden fields from any page HTML (GET or POST response).
-    Returns a dict with __VIEWSTATE, __VIEWSTATEGENERATOR, __EVENTVALIDATION.
-    """
     soup = BeautifulSoup(html, "html.parser")
 
     def val(field_id: str) -> str:
@@ -107,25 +77,14 @@ def extract_viewstate(html: str) -> dict:
         "__EVENTVALIDATION":    val("__EVENTVALIDATION"),
     }
 
-
 def fetch_fresh_viewstate(session: requests.Session) -> dict:
-    """
-    GET the Floorsheet page to obtain a fresh set of ASP.NET hidden fields.
-    Only needed once per day (or after a session reset).
-    """
     r = session.get(BASE_URL, timeout=30)
     r.raise_for_status()
     return extract_viewstate(r.text)
 
-
 def parse_total_pages(html: str) -> int:
-    """
-    Extract total page count from the pager control text:
-    'Showing 1 - 500 of 12345 records. [Total pages: 25]'
-    """
     m = re.search(r"Total pages:\s*(\d+)", html)
     return int(m.group(1)) if m else 1
-
 
 # ── single page fetch ─────────────────────────────────────────────────────────
 
@@ -138,16 +97,6 @@ def fetch_page(
     vs:         dict,     # current viewstate — updated and returned each call
     retries:    int = 3,
 ) -> tuple[BeautifulSoup | None, int, dict]:
-    """
-    POST to Merolagani for one page of floorsheet data.
-
-    Accepts *vs* (viewstate dict from previous GET or POST) to avoid
-    a redundant GET per page — ASP.NET includes fresh hidden fields in
-    every HTML response, so we chain them forward across pages.
-
-    Returns (soup, total_pages, updated_vs).
-    On failure returns (None, 1, vs_unchanged).
-    """
     for attempt in range(retries + 1):
         try:
             data = {
@@ -197,16 +146,9 @@ def fetch_page(
                           retries, symbol, date_str, page, e)
                 return None, 1, vs
 
-
 # ── parse table ───────────────────────────────────────────────────────────────
 
 def parse_table(soup: BeautifulSoup) -> list[dict]:
-    """
-    Extract rows from the floorsheet HTML table.
-    Returns a list of dicts with keys:
-        transact_no, symbol, buyer_broker, seller_broker,
-        quantity, rate, amount
-    """
     table = soup.find("table")
     if not table:
         return []
@@ -230,7 +172,6 @@ def parse_table(soup: BeautifulSoup) -> list[dict]:
             continue  # skip malformed rows
     return rows
 
-
 # ── scrape one symbol × one date ──────────────────────────────────────────────
 
 def scrape_date(
@@ -240,14 +181,6 @@ def scrape_date(
     trade_date: date,
     vs:         dict,
 ) -> tuple[list[dict], dict]:
-    """
-    Fetch all pages of floorsheet for *symbol* on *trade_date*.
-
-    Accepts and returns the current viewstate dict so the caller can
-    chain it to the next call, eliminating one GET per date.
-
-    Returns (list_of_trade_records, updated_vs).
-    """
     date_str = trade_date.strftime("%m/%d/%Y")
     all_rows: list[dict] = []
 
@@ -284,14 +217,9 @@ def scrape_date(
 
     return all_rows, vs
 
-
 # ── date range helpers ────────────────────────────────────────────────────────
 
 def nepse_trading_days(start: date, end: date) -> list[date]:
-    """
-    Return all NEPSE trading days (Sun–Thu) between start and end inclusive.
-    Does NOT filter out public holidays (that would require a holiday calendar).
-    """
     days = []
     d = start
     while d <= end:
@@ -301,7 +229,6 @@ def nepse_trading_days(start: date, end: date) -> list[date]:
         d += timedelta(days=1)
     return days
 
-
 # ── main scrape loop ──────────────────────────────────────────────────────────
 
 def scrape_symbol(
@@ -310,11 +237,6 @@ def scrape_symbol(
     end:        date,
     output_dir: Path,
 ) -> Path | None:
-    """
-    Scrape all floorsheet data for *symbol* from *start* to *end*.
-    Saves raw CSV to output_dir/raw/{symbol}_{start}_{end}.csv.
-    Returns path to the saved CSV, or None on failure.
-    """
     session = make_session()
 
     log.info("Resolving company ID for %s ...", symbol)
@@ -356,35 +278,9 @@ def scrape_symbol(
     log.info("Saved %d records to %s", len(df), out_path)
     return out_path
 
-
 # ── tick rule classifier ──────────────────────────────────────────────────────
 
 def classify_trade_direction(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Apply the tick rule to infer trade direction from price changes.
-
-    Rules (Ellis, Michaely, O'Hara 2000):
-      - rate > prev_rate  → buy-initiated  (+1)
-      - rate < prev_rate  → sell-initiated (-1)
-      - rate == prev_rate → inherit previous direction (reverse tick rule)
-
-    NOTE: Classification is done within each (date, symbol) group
-    since price continuity only holds within a trading session.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Raw floorsheet with columns: date, transact_no, symbol,
-        buyer_broker, seller_broker, quantity, rate, amount.
-
-    Returns
-    -------
-    pd.DataFrame
-        Same rows with an added 'direction' column:
-            +1 = buy-initiated
-            -1 = sell-initiated
-             0 = unclassified (first trade of session, or failed carry-forward)
-    """
     df = df.copy().sort_values(["date", "symbol", "transact_no"]).reset_index(drop=True)
 
     directions = []
@@ -415,16 +311,7 @@ def classify_trade_direction(df: pd.DataFrame) -> pd.DataFrame:
     df["direction"] = directions
     return df
 
-
 def aggregate_daily(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Aggregate classified trades to daily buy/sell counts per symbol.
-
-    Returns a DataFrame with columns:
-        date, symbol,
-        num_buys, num_sells, unclassified, total_trades,
-        buy_volume, sell_volume, total_volume
-    """
     # Classify direction
     df = classify_trade_direction(df)
 
@@ -450,20 +337,9 @@ def aggregate_daily(df: pd.DataFrame) -> pd.DataFrame:
     daily["date"] = pd.to_datetime(daily["date"])
     return daily
 
-
 # ── data quality checker ──────────────────────────────────────────────────────
 
 def quality_report(daily: pd.DataFrame, symbol: str, output_dir: Path) -> str:
-    """
-    Generate a markdown quality report for the daily aggregated data.
-
-    Flags:
-      - Days with zero trades (holiday / data gap)
-      - Days with fewer than 5 trades (insufficient for MLE)
-      - High unclassified rate (> 20% of trades)
-
-    Returns the markdown string and saves it to output_dir/quality/.
-    """
     total_days    = len(daily)
     zero_days     = daily[daily["total_trades"] == 0]
     sparse_days   = daily[(daily["total_trades"] > 0) & (daily["total_trades"] < 5)]
@@ -540,7 +416,6 @@ def quality_report(daily: pd.DataFrame, symbol: str, output_dir: Path) -> str:
     log.info("Quality report saved to %s", out_path)
     return report
 
-
 # ── pipeline ──────────────────────────────────────────────────────────────────
 
 def run_pipeline(
@@ -549,10 +424,6 @@ def run_pipeline(
     end:        date,
     output_dir: Path = Path("data"),
 ):
-    """
-    Full pipeline: scrape → classify → aggregate → quality report
-    for each symbol in *symbols*.
-    """
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "raw").mkdir(exist_ok=True)
     (output_dir / "daily").mkdir(exist_ok=True)
@@ -590,7 +461,6 @@ def run_pipeline(
         }
 
     return results
-
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 

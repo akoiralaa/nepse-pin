@@ -1,21 +1,3 @@
-"""
-analysis.py
------------
-NEPSE PIN Model — Task 3: Cross-Sectional Analysis
-
-Runs after pin_estimator.py produces PIN estimates for all stocks.
-
-Produces:
-  1. Summary statistics table (LaTeX + CSV)
-  2. Sector comparison — ANOVA + box plot
-  3. Correlation analysis — PIN vs volume, trades, spread proxy
-  4. Time-series of aggregate PIN (quarterly rolling average)
-  5. Robustness checks — BVC classification + >300-day subsample
-
-Usage:
-    python3 analysis.py --daily data/daily/ --pin pin_results.csv --output results/
-"""
-
 import argparse
 import logging
 from pathlib import Path
@@ -72,11 +54,9 @@ NEPSE_EVENTS = [
     ("2022-07-01", "Bear\nmarket"),
 ]
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def load_all_daily(daily_dir: Path) -> pd.DataFrame:
-    """Load and concatenate all per-symbol daily CSVs."""
     frames = []
     for f in sorted(daily_dir.glob("*_daily.csv")):
         df = pd.read_csv(f, parse_dates=["date"])
@@ -85,20 +65,14 @@ def load_all_daily(daily_dir: Path) -> pd.DataFrame:
         raise FileNotFoundError(f"No *_daily.csv files found in {daily_dir}")
     return pd.concat(frames, ignore_index=True)
 
-
 def add_sector(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["sector"] = df["symbol"].map(SECTOR_MAP).fillna("Other")
     return df
 
-
 # ── 1. summary statistics table ───────────────────────────────────────────────
 
 def summary_table(pin_df: pd.DataFrame, daily_df: pd.DataFrame, output_dir: Path):
-    """
-    Table 1: per-stock summary statistics + PIN estimates.
-    Saved as CSV and LaTeX (booktabs style).
-    """
     # Merge daily stats into PIN results
     stats_rows = []
     for _, row in pin_df.iterrows():
@@ -160,13 +134,9 @@ def summary_table(pin_df: pd.DataFrame, daily_df: pd.DataFrame, output_dir: Path
 
     return tbl
 
-
 # ── 2. sector comparison ──────────────────────────────────────────────────────
 
 def sector_analysis(pin_df: pd.DataFrame, output_dir: Path):
-    """
-    One-way ANOVA across sectors + box plot (Figure 1).
-    """
     df = add_sector(pin_df)
 
     # ANOVA
@@ -220,13 +190,9 @@ def sector_analysis(pin_df: pd.DataFrame, output_dir: Path):
 
     return {"f_stat": f_stat, "p_val": p_val, "sector_summary": sector_summary}
 
-
 # ── 3. correlation analysis ───────────────────────────────────────────────────
 
 def correlation_analysis(pin_df: pd.DataFrame, daily_df: pd.DataFrame, output_dir: Path):
-    """
-    Spearman rank correlations: PIN vs volume, trades, spread proxy.
-    """
     rows = []
     for _, row in pin_df.iterrows():
         sym = row["symbol"]
@@ -274,7 +240,6 @@ def correlation_analysis(pin_df: pd.DataFrame, daily_df: pd.DataFrame, output_di
     log.info("Correlation table saved: %s", csv_path)
     return corr_tbl
 
-
 # ── 4. time-series of aggregate PIN ──────────────────────────────────────────
 
 def aggregate_pin_timeseries(
@@ -282,14 +247,6 @@ def aggregate_pin_timeseries(
     pin_df:   pd.DataFrame,
     output_dir: Path,
 ):
-    """
-    Compute a rolling quarterly (63-trading-day) average PIN across all
-    stocks and plot with NEPSE event annotations (Figure 2).
-
-    Method: re-estimate PIN on a rolling window for each stock, then
-    average.  For speed, we use point estimates from the full-sample MLE
-    as warm starts.
-    """
     from pin_estimator import estimate_pin
 
     log.info("Computing rolling PIN time-series (this may take a while)...")
@@ -361,15 +318,9 @@ def aggregate_pin_timeseries(
     _save(fig, output_dir, "figure2_rolling_pin")
     return ts
 
-
 # ── 5. robustness checks ──────────────────────────────────────────────────────
 
 def robustness_checks(daily_df: pd.DataFrame, pin_df: pd.DataFrame, output_dir: Path):
-    """
-    (a) Re-estimate PIN using only stocks with >300 usable trading days.
-    (b) BVC (Bulk Volume Classification) alternative to tick rule.
-    (c) Correlation between tick-rule PIN and BVC-PIN.
-    """
     from pin_estimator import estimate_pin
 
     log.info("Running robustness checks...")
@@ -426,19 +377,7 @@ def robustness_checks(daily_df: pd.DataFrame, pin_df: pd.DataFrame, output_dir: 
         ax.legend(fontsize=9, frameon=False)
         _save(fig, output_dir, "figure3_bvc_robustness")
 
-
 def _apply_bvc(daily_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Bulk Volume Classification (Easley, Lopez de Prado, O'Hara 2012).
-
-    For each (date, symbol), estimate:
-      buy_fraction = 0.5 + 0.5 * sign(ΔP)
-    where ΔP = close - prev_close (approximated as rate change across days).
-
-    Then:
-      num_buys_bvc  = total_trades * buy_fraction
-      num_sells_bvc = total_trades * (1 - buy_fraction)
-    """
     df = daily_df.copy().sort_values(["symbol", "date"])
 
     bvc_rows = []
@@ -469,7 +408,6 @@ def _apply_bvc(daily_df: pd.DataFrame) -> pd.DataFrame:
 
     return pd.DataFrame(bvc_rows)
 
-
 # ── save helper ───────────────────────────────────────────────────────────────
 
 def _save(fig: plt.Figure, output_dir: Path, name: str):
@@ -478,7 +416,6 @@ def _save(fig: plt.Figure, output_dir: Path, name: str):
         fig.savefig(path)
         log.info("Saved %s", path)
     plt.close(fig)
-
 
 # ── main pipeline ─────────────────────────────────────────────────────────────
 
@@ -516,7 +453,6 @@ def run_analysis(daily_dir: Path, pin_csv: Path, output_dir: Path):
     robustness_checks(daily_df, pin_df, output_dir)
 
     log.info("\nAll analysis complete. Outputs in %s", output_dir)
-
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
