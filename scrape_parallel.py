@@ -25,7 +25,7 @@ SYMBOLS = [
     "GMFIL", "CFCL",
 ]
 
-MAX_WORKERS   = 4     # concurrent symbols; raise to 5-6 if Merolagani is tolerant
+MAX_WORKERS   = 6     # concurrent symbols
 STAGGER_SECS  = 8     # seconds between launching each worker
 
 def already_done(symbol: str, start: date, end: date, output_dir: Path) -> bool:
