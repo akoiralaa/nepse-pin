@@ -17,8 +17,33 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BASE_URL    = "https://merolagani.com/Floorsheet.aspx"
 AUTOSUGGEST = "https://merolagani.com/handlers/AutoSuggestHandler.ashx"
-PAGE_SIZE   = 500   # Merolagani returns 500 rows per page
-RATE_LIMIT  = 2.0   # seconds between requests (be a good citizen)
+PAGE_SIZE        = 500   # Merolagani returns 500 rows per page
+RATE_LIMIT       = 2.0   # seconds between requests (be a good citizen)
+RATE_LIMIT_ZERO  = 0.3   # shorter pause after confirmed 0-trade days (holidays)
+
+# Known NEPSE public holidays (fixed-date or near-fixed) — skip without a request.
+# Covers 2021-2026. Lunar holidays (Dashain, Tihar, Holi) shift ~1-2 weeks per year
+# and are NOT included here; those get caught by the 0-trade short-circuit below.
+_FIXED_HOLIDAYS: set[date] = {
+    # Prithvi Jayanti / National Unity Day — Jan 11
+    date(2021,1,11), date(2022,1,11), date(2023,1,11), date(2024,1,11), date(2025,1,11), date(2026,1,11),
+    # Martyrs' Day — Jan 30
+    date(2021,1,30), date(2022,1,30), date(2023,1,30), date(2024,1,30), date(2025,1,30), date(2026,1,30),
+    # Democracy Day — Feb 18 / Feb 19
+    date(2021,2,18), date(2022,2,18), date(2023,2,18), date(2024,2,18), date(2025,2,18), date(2026,2,18),
+    # Women's Day observed by NEPSE — Mar 8
+    date(2021,3,8),  date(2022,3,8),  date(2023,3,8),  date(2024,3,8),  date(2025,3,8),  date(2026,3,8),
+    # Nepali New Year (Baisakh 1) — around Apr 13/14
+    date(2021,4,14), date(2022,4,14), date(2023,4,14), date(2024,4,14), date(2025,4,14), date(2026,4,14),
+    # Labour Day — May 1
+    date(2021,5,1),  date(2022,5,1),  date(2023,5,1),  date(2024,5,1),  date(2025,5,1),  date(2026,5,1),
+    # Republic Day — May 29
+    date(2021,5,29), date(2022,5,29), date(2023,5,29), date(2024,5,29), date(2025,5,29), date(2026,5,29),
+    # Constitution Day — Sep 20 / Sep 19
+    date(2021,9,20), date(2022,9,20), date(2023,9,20), date(2024,9,19), date(2025,9,20), date(2026,9,20),
+    # Christmas — Dec 25
+    date(2021,12,25),date(2022,12,25),date(2023,12,25),date(2024,12,25),date(2025,12,25),date(2026,12,25),
+}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -223,8 +248,8 @@ def nepse_trading_days(start: date, end: date) -> list[date]:
     days = []
     d = start
     while d <= end:
-        # NEPSE trades Sun(6)–Thu(3); skip Fri(4) and Sat(5)
-        if d.weekday() not in (4, 5):
+        # NEPSE trades Sun(6)–Thu(3); skip Fri(4), Sat(5), and known public holidays
+        if d.weekday() not in (4, 5) and d not in _FIXED_HOLIDAYS:
             days.append(d)
         d += timedelta(days=1)
     return days
@@ -260,7 +285,8 @@ def scrape_symbol(
         records, vs = scrape_date(session, symbol, company_id, trade_date, vs)
         log.info("  → %d trades", len(records))
         all_records.extend(records)
-        time.sleep(RATE_LIMIT)
+        # Confirmed holiday/closure — don't burn the full rate-limit window
+        time.sleep(RATE_LIMIT_ZERO if len(records) == 0 else RATE_LIMIT)
 
     if not all_records:
         log.warning("No data collected for %s", symbol)
