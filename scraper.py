@@ -279,10 +279,24 @@ def scrape_symbol(
     log.info("  Fetching initial viewstate...")
     vs = fetch_fresh_viewstate(session)
 
+    VS_REFRESH_EVERY = 50   # force a fresh GET every N days to prevent session expiry
+
     all_records: list[dict] = []
     for i, trade_date in enumerate(trading_days, 1):
         log.info("[%d/%d] %s  %s", i, len(trading_days), symbol, trade_date)
+
+        # Periodic hard refresh + stale-viewstate recovery
+        if i % VS_REFRESH_EVERY == 0 or not vs.get("__VIEWSTATE"):
+            log.info("  Refreshing viewstate (day %d)...", i)
+            vs = fetch_fresh_viewstate(session)
+
         records, vs = scrape_date(session, symbol, company_id, trade_date, vs)
+
+        # If viewstate came back empty the POST likely hit an expired session — refresh now
+        if not vs.get("__VIEWSTATE"):
+            log.warning("  Viewstate went stale after %s — refreshing", trade_date)
+            vs = fetch_fresh_viewstate(session)
+
         log.info("  → %d trades", len(records))
         all_records.extend(records)
         # Confirmed holiday/closure — don't burn the full rate-limit window
