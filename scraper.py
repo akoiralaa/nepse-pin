@@ -103,7 +103,7 @@ def extract_viewstate(html: str) -> dict:
     }
 
 def fetch_fresh_viewstate(session: requests.Session) -> dict:
-    r = session.get(BASE_URL, timeout=30)
+    r = session.get(BASE_URL, timeout=90)
     r.raise_for_status()
     return extract_viewstate(r.text)
 
@@ -120,7 +120,7 @@ def fetch_page(
     symbol:     str,
     page:       int,      # 0-indexed
     vs:         dict,     # current viewstate — updated and returned each call
-    retries:    int = 3,
+    retries:    int = 5,
 ) -> tuple[BeautifulSoup | None, int, dict]:
     for attempt in range(retries + 1):
         try:
@@ -151,7 +151,7 @@ def fetch_page(
                 BASE_URL,
                 data=data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=60,
+                timeout=90,
             )
             r.raise_for_status()
 
