@@ -2,8 +2,8 @@
 
 **Informed Trading and Market Microstructure on the Nepal Stock Exchange: A First Application of the PIN Model**
 
-*Abhie Koirala — University of North Texas*
-*Target: SSRN working paper, August 2026*
+*Abhie Koirala*
+
 
 ---
 
