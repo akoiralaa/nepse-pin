@@ -1,0 +1,4 @@
+Variable,Spearman ρ,p-value,N
+Avg. Daily Trades,0.1,0.7699,11
+Avg. Daily Volume,0.3545,0.2847,11
+Order Imbalance (|B−S|/N),-0.1818,0.5926,11

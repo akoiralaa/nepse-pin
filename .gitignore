@@ -13,9 +13,7 @@ data/logs/
 data_test/
 data_test2/
 
-# Results (regeneratable)
-results/
-pin_results.csv
+# Logs (but keep key outputs)
 pin_estimation_log.txt
 analysis_log.txt
 
