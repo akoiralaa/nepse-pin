@@ -102,10 +102,21 @@ def extract_viewstate(html: str) -> dict:
         "__EVENTVALIDATION":    val("__EVENTVALIDATION"),
     }
 
-def fetch_fresh_viewstate(session: requests.Session) -> dict:
-    r = session.get(BASE_URL, timeout=90)
-    r.raise_for_status()
-    return extract_viewstate(r.text)
+def fetch_fresh_viewstate(session: requests.Session, retries: int = 5) -> dict:
+    for attempt in range(retries + 1):
+        try:
+            r = session.get(BASE_URL, timeout=90)
+            r.raise_for_status()
+            return extract_viewstate(r.text)
+        except requests.RequestException as e:
+            wait = 2 ** attempt * 5
+            if attempt < retries:
+                log.warning("Viewstate GET failed (attempt %d/%d): %s. Retrying in %ds",
+                            attempt + 1, retries, e, wait)
+                time.sleep(wait)
+            else:
+                log.error("Viewstate GET gave up after %d retries: %s", retries, e)
+                raise
 
 def parse_total_pages(html: str) -> int:
     m = re.search(r"Total pages:\s*(\d+)", html)
