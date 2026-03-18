@@ -23,7 +23,7 @@ analysis_log.txt
 # Logs
 *.log
 *.txt
-!DEVLOG.md
+DEVLOG.md
 !README.md
 
 # macOS
