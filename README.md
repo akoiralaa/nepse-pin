@@ -172,7 +172,11 @@ with `log P(x|λ) = x·log(λ) − λ − lgamma(x+1)` via `scipy.special.gammal
 
 If you use this code, please cite:
 
-> Koirala, A. (2026). *Informed Trading and Market Microstructure on the Nepal Stock Exchange: A First Application of the PIN Model.*
+> Koirala, A. (2026). *Informed Trading and Market Microstructure on the Nepal Stock Exchange: A First Application of the PIN Model.* Working Paper.
+
+## License
+
+MIT — see [LICENSE](LICENSE)
 
 ---
 
